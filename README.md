@@ -1,38 +1,62 @@
-\# NRMS — Numbering Resource Management System (Demo)
+# NRMS — Numbering Resource Management System (Demo)
 
+Offline-first desktop demonstration of a regulator-grade **Numbering Resource Management System (NRMS)**.  
+This prototype focuses on **traceability, data integrity, and auditability** for case-based regulatory workflows.
 
+## What this demo currently supports
 
-Offline-first desktop demo of a regulator-grade Numbering Resource Management System (NRMS) focused on:
+- **Case creation** (e.g., Allocation)
+- **Open an existing case** by **Case Reference**
+- **Evidence attachment** (file stored + **Secure Hash Algorithm 256-bit (SHA-256)** checksum recorded)
+- **SQLite persistence** (cases, evidence, and audit events persist across restarts)
+- **Append-only audit trail** (e.g., `CaseCreated`, `EvidenceAttached`)
 
-\- Allocation cases with evidence indexing and Secure Hash Algorithm 256-bit (SHA-256) checksums
+Planned (future slices):
+- Separation of Duties (SoD) between Review and Approval
+- Controlled outputs (Portable Document Format (PDF), Comma-Separated Values (CSV), ZIP export packs)
+- Number range management, allocations, reservations, reporting
 
-\- Separation of Duties (SoD) between Review and Approval
+## Why this matters for a regulator
 
-\- Append-only audit trail events
+This is a compact demonstration of:
+- **Chain-of-custody** for evidence (stored artifact + hash)
+- **Non-repudiation support** (audit events recorded for each action)
+- **Reproducibility** (same case can be re-opened and verified by reference)
 
-\- Controlled outputs (Portable Document Format (PDF), Comma-Separated Values (CSV), and ZIP export packs)
+## Solution structure
 
+- **NRMS.Domain** — core domain model and rules
+- **NRMS.Application** — use cases (commands/queries), validation, orchestration
+- **NRMS.Infrastructure** — SQLite persistence, file storage, hashing, system clock
+- **NRMS.Desktop** — Windows Presentation Foundation (WPF) user interface
+- **NRMS.Tests** — xUnit tests (Test-Driven Development (TDD))
 
+## Demo workflow (3–5 minutes)
 
-\## Solution structure
+1. **Create Case**
+   - Enter **Created By**
+   - Select **Case Type**
+   - Click **Create Case**
+   - Note the **Case Reference** and **Case ID**
 
-\- NRMS.Domain — core domain model and rules
+2. **Attach Evidence**
+   - Enter **Source**
+   - Click **Pick File...**
+   - Click **Attach**
+   - Verify:
+     - Evidence grid shows **SHA-256**
+     - Audit trail shows **EvidenceAttached**
 
-\- NRMS.Application — use cases (commands/queries), validation, orchestration
+3. **Open Case**
+   - Copy a previous **Case Reference**
+   - Paste into **Open Case**
+   - Click **Open Case**
+   - Verify evidence + audit trail reload
 
-\- NRMS.Infrastructure — persistence, file storage, export generation (later)
+## Build and test
 
-\- NRMS.Desktop — Windows Presentation Foundation (WPF) user interface
-
-\- NRMS.Tests — xUnit tests (Test-Driven Development (TDD))
-
-
-
-\## Build and test
+From the repository root:
 
 ```bash
-
+dotnet build
 dotnet test
-
-
-
