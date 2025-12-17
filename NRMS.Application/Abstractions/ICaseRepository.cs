@@ -7,4 +7,6 @@ public interface ICaseRepository
     Task AddAsync(NrmsCase nrmsCase, CancellationToken ct = default);
     Task<NrmsCase?> GetAsync(Guid caseId, CancellationToken ct = default);
     Task UpdateAsync(NrmsCase nrmsCase, CancellationToken ct = default);
+    Task<NrmsCase?> GetByReferenceAsync(string caseReference, CancellationToken ct = default);
+
 }

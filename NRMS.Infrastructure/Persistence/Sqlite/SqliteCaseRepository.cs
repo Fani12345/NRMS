@@ -201,4 +201,30 @@ VALUES (@eid, @cid, @fn, @sd, @at, @by, @sha, @path);
 
         setMethod.Invoke(nrmsCase, new object[] { status });
     }
+
+    public async Task<NrmsCase?> GetByReferenceAsync(string caseReference, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(caseReference))
+            throw new DomainException("CaseReference is required.");
+
+        var target = caseReference.Trim();
+
+        await using var conn = _db.OpenConnection();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+SELECT CaseId
+FROM Cases
+WHERE CaseReference = @ref
+LIMIT 1;
+";
+        cmd.Parameters.AddWithValue("@ref", target);
+
+        var scalar = await cmd.ExecuteScalarAsync(ct);
+        if (scalar is null || scalar is DBNull)
+            return null;
+
+        var id = Guid.Parse((string)scalar);
+        return await GetAsync(id, ct);
+    }
+
 }

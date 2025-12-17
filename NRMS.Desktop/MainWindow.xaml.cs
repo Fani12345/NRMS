@@ -21,6 +21,7 @@ public partial class MainWindow : Window
 
         SetStatus("Ready.");
         RefreshEvidenceGrid(Array.Empty<EvidenceRow>());
+        RefreshAuditGrid(Array.Empty<AuditRow>());
         UpdateButtons();
     }
 
@@ -42,7 +43,7 @@ public partial class MainWindow : Window
             _selectedFilePath = null;
             SelectedFileTextBox.Text = string.Empty;
 
-            await ReloadEvidenceAsync();
+            await ReloadEvidenceAsync(); // also reloads audit
             UpdateButtons();
 
             SetStatus($"Case created: {result.CaseReference}");
@@ -50,6 +51,45 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             SetStatus($"Create case failed: {ex.Message}");
+        }
+    }
+
+    private async void OpenCaseButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var caseRef = (OpenCaseReferenceTextBox.Text ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(caseRef))
+            {
+                SetStatus("Enter a Case Reference to open.");
+                return;
+            }
+
+            var services = ((App)System.Windows.Application.Current).Services;
+            var c = await services.CaseRepository.GetByReferenceAsync(caseRef);
+
+            if (c is null)
+            {
+                SetStatus($"Case not found: {caseRef}");
+                return;
+            }
+
+            _currentCaseId = c.CaseId;
+
+            CaseIdTextBox.Text = c.CaseId.ToString();
+            CaseReferenceTextBox.Text = c.CaseReference;
+
+            _selectedFilePath = null;
+            SelectedFileTextBox.Text = string.Empty;
+
+            await ReloadEvidenceAsync(); // also reloads audit
+            UpdateButtons();
+
+            SetStatus($"Opened case: {c.CaseReference}");
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Open case failed: {ex.Message}");
         }
     }
 
@@ -85,7 +125,7 @@ public partial class MainWindow : Window
         {
             if (_currentCaseId == Guid.Empty)
             {
-                SetStatus("Create a case first.");
+                SetStatus("Create a case first or open an existing case first.");
                 return;
             }
 
@@ -114,7 +154,7 @@ public partial class MainWindow : Window
             _selectedFilePath = null;
             SelectedFileTextBox.Text = string.Empty;
 
-            await ReloadEvidenceAsync();
+            await ReloadEvidenceAsync(); // also reloads audit
             UpdateButtons();
 
             SetStatus($"Evidence attached: {result.StoredPath}");
@@ -125,11 +165,25 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void ReloadAuditButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await ReloadAuditAsync();
+            SetStatus("Audit trail reloaded.");
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Reload audit failed: {ex.Message}");
+        }
+    }
+
     private async Task ReloadEvidenceAsync()
     {
         if (_currentCaseId == Guid.Empty)
         {
             RefreshEvidenceGrid(Array.Empty<EvidenceRow>());
+            RefreshAuditGrid(Array.Empty<AuditRow>());
             return;
         }
 
@@ -139,6 +193,7 @@ public partial class MainWindow : Window
         if (c is null)
         {
             RefreshEvidenceGrid(Array.Empty<EvidenceRow>());
+            RefreshAuditGrid(Array.Empty<AuditRow>());
             return;
         }
 
@@ -150,17 +205,45 @@ public partial class MainWindow : Window
         )).ToList();
 
         RefreshEvidenceGrid(rows);
+
+        await ReloadAuditAsync();
     }
 
+    private async Task ReloadAuditAsync()
+    {
+        if (_currentCaseId == Guid.Empty)
+        {
+            RefreshAuditGrid(Array.Empty<AuditRow>());
+            return;
+        }
+
+        var services = ((App)System.Windows.Application.Current).Services;
+        var events = await services.AuditRepository.GetByCaseAsync(_currentCaseId);
+
+        var rows = events.Select(e => new AuditRow(
+            OccurredAtUtc: e.OccurredAtUtc.ToString("O"),
+            EventType: e.EventType.ToString(),
+            Actor: e.Actor,
+            ObjectSummary: $"{e.ObjectType}:{e.ObjectId}"
+        )).ToList();
+
+        RefreshAuditGrid(rows);
+    }
 
     private void RefreshEvidenceGrid(IEnumerable<EvidenceRow> rows)
     {
         EvidenceDataGrid.ItemsSource = rows.ToList();
     }
 
+    private void RefreshAuditGrid(IEnumerable<AuditRow> rows)
+    {
+        AuditDataGrid.ItemsSource = rows.ToList();
+    }
+
     private void UpdateButtons()
     {
         CreateCaseButton.IsEnabled = true;
+        OpenCaseButton.IsEnabled = true;
 
         PickFileButton.IsEnabled = _currentCaseId != Guid.Empty;
 
@@ -176,4 +259,5 @@ public partial class MainWindow : Window
     }
 
     private sealed record EvidenceRow(string ImportedAtUtc, string FileName, string Sha256, string StoredPath);
+    private sealed record AuditRow(string OccurredAtUtc, string EventType, string Actor, string ObjectSummary);
 }
