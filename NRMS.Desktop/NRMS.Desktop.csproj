@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\NRMS.Domain\NRMS.Domain.csproj" />
     <ProjectReference Include="..\NRMS.Application\NRMS.Application.csproj" />
+    <ProjectReference Include="..\NRMS.Infrastructure\NRMS.Infrastructure.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -1,4 +1,4 @@
-﻿using System.Windows;
+﻿using NRMS.Desktop.Services;
 
 namespace NRMS.Desktop;
 
@@ -7,4 +7,5 @@ namespace NRMS.Desktop;
 /// </summary>
 public partial class App : System.Windows.Application
 {
+    public AppServices Services { get; } = new AppServices();
 }
