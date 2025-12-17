@@ -1,6 +1,8 @@
 ﻿using Microsoft.Win32;
 using NRMS.Application.Contracts;
+using NRMS.Application.Contracts.Numbering;
 using NRMS.Domain.Enums;
+using NRMS.Domain.Numbering;
 using System.IO;
 using System.Windows;
 
@@ -19,9 +21,16 @@ public partial class MainWindow : Window
         CaseTypeComboBox.ItemsSource = Enum.GetValues(typeof(CaseType)).Cast<CaseType>();
         CaseTypeComboBox.SelectedItem = CaseType.Allocation;
 
+        // Populate NumberType combo box
+        NumberTypeComboBox.ItemsSource = Enum.GetValues(typeof(NumberType)).Cast<NumberType>();
+        NumberTypeComboBox.SelectedItem = NumberType.Msisdn;
+
         SetStatus("Ready.");
         RefreshEvidenceGrid(Array.Empty<EvidenceRow>());
         RefreshAuditGrid(Array.Empty<AuditRow>());
+        RefreshBlocksGrid(Array.Empty<BlockRow>());
+        RefreshAllocationsGrid(Array.Empty<AllocationRow>());
+
         UpdateButtons();
     }
 
@@ -178,6 +187,106 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void CreateOperatorButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var name = (OperatorNameTextBox.Text ?? string.Empty).Trim();
+            var lic = (OperatorLicenseTextBox.Text ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                SetStatus("Operator name is required.");
+                return;
+            }
+
+            var svc = ((App)System.Windows.Application.Current).Services.NumberingService;
+
+            var res = await svc.CreateOperatorAsync(new CreateOperatorCommand(name, string.IsNullOrWhiteSpace(lic) ? null : lic));
+
+            AllocateOperatorIdTextBox.Text = res.OperatorId.ToString();
+
+            SetStatus($"Operator created. OperatorId={res.OperatorId}");
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Create operator failed: {ex.Message}");
+        }
+    }
+
+    private async void AddBlockButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var numberType = (NumberType)(NumberTypeComboBox.SelectedItem ?? NumberType.Msisdn);
+
+            if (!long.TryParse((BlockStartTextBox.Text ?? string.Empty).Trim(), out var start))
+            {
+                SetStatus("Block Start must be a valid number.");
+                return;
+            }
+
+            if (!long.TryParse((BlockEndTextBox.Text ?? string.Empty).Trim(), out var end))
+            {
+                SetStatus("Block End must be a valid number.");
+                return;
+            }
+
+            var svc = ((App)System.Windows.Application.Current).Services.NumberingService;
+
+            var res = await svc.AddNumberingBlockAsync(new AddNumberingBlockCommand(
+                NumberType: numberType,
+                Start: start,
+                End: end,
+                Notes: "Added from desktop demo"
+            ));
+
+            AllocateBlockIdTextBox.Text = res.BlockId.ToString();
+
+            await ReloadNumberingGridsAsync();
+
+            SetStatus($"Block added. BlockId={res.BlockId}");
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Add block failed: {ex.Message}");
+        }
+    }
+
+    private async void AllocateBlockButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (!Guid.TryParse((AllocateOperatorIdTextBox.Text ?? string.Empty).Trim(), out var operatorId))
+            {
+                SetStatus("Operator Id must be a valid GUID.");
+                return;
+            }
+
+            if (!Guid.TryParse((AllocateBlockIdTextBox.Text ?? string.Empty).Trim(), out var blockId))
+            {
+                SetStatus("Block Id must be a valid GUID.");
+                return;
+            }
+
+            var svc = ((App)System.Windows.Application.Current).Services.NumberingService;
+
+            var res = await svc.AllocateNumberingBlockAsync(new AllocateNumberingBlockCommand(
+                BlockId: blockId,
+                OperatorId: operatorId,
+                ExpiresAtUtc: DateTime.UtcNow.AddDays(30),
+                Notes: "Allocated from desktop demo"
+            ));
+
+            await ReloadNumberingGridsAsync();
+
+            SetStatus($"Allocated. AllocationId={res.AllocationId}");
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Allocate failed: {ex.Message}");
+        }
+    }
+
     private async Task ReloadEvidenceAsync()
     {
         if (_currentCaseId == Guid.Empty)
@@ -230,6 +339,41 @@ public partial class MainWindow : Window
         RefreshAuditGrid(rows);
     }
 
+    private async Task ReloadNumberingGridsAsync()
+    {
+        var services = ((App)System.Windows.Application.Current).Services;
+
+        // Blocks: show MSISDN blocks for demo (you can change later to selected type)
+        var blocks = await services.NumberingBlockRepository.ListByTypeAsync(NumberType.Msisdn);
+
+        var blockRows = blocks.Select(b => new BlockRow(
+            BlockId: b.BlockId.ToString(),
+            NumberType: b.NumberType.ToString(),
+            Range: b.Range.ToString(),
+            Status: b.Status.ToString(),
+            Notes: b.Notes ?? string.Empty
+        )).ToList();
+
+        RefreshBlocksGrid(blockRows);
+
+        // Allocations: aggregate all allocations by scanning known blocks
+        var allocRows = new List<AllocationRow>();
+        foreach (var b in blocks)
+        {
+            var allocs = await services.AllocationRepository.ListByBlockAsync(b.BlockId);
+            allocRows.AddRange(allocs.Select(a => new AllocationRow(
+                AllocationId: a.AllocationId.ToString(),
+                BlockId: a.BlockId.ToString(),
+                OperatorId: a.OperatorId.ToString(),
+                AllocatedAtUtc: a.AllocatedAtUtc.ToString("O"),
+                ExpiresAtUtc: a.ExpiresAtUtc?.ToString("O") ?? string.Empty,
+                Notes: a.Notes ?? string.Empty
+            )));
+        }
+
+        RefreshAllocationsGrid(allocRows);
+    }
+
     private void RefreshEvidenceGrid(IEnumerable<EvidenceRow> rows)
     {
         EvidenceDataGrid.ItemsSource = rows.ToList();
@@ -238,6 +382,16 @@ public partial class MainWindow : Window
     private void RefreshAuditGrid(IEnumerable<AuditRow> rows)
     {
         AuditDataGrid.ItemsSource = rows.ToList();
+    }
+
+    private void RefreshBlocksGrid(IEnumerable<BlockRow> rows)
+    {
+        BlocksDataGrid.ItemsSource = rows.ToList();
+    }
+
+    private void RefreshAllocationsGrid(IEnumerable<AllocationRow> rows)
+    {
+        AllocationsDataGrid.ItemsSource = rows.ToList();
     }
 
     private void UpdateButtons()
@@ -260,4 +414,8 @@ public partial class MainWindow : Window
 
     private sealed record EvidenceRow(string ImportedAtUtc, string FileName, string Sha256, string StoredPath);
     private sealed record AuditRow(string OccurredAtUtc, string EventType, string Actor, string ObjectSummary);
+
+    private sealed record BlockRow(string BlockId, string NumberType, string Range, string Status, string Notes);
+
+    private sealed record AllocationRow(string AllocationId, string BlockId, string OperatorId, string AllocatedAtUtc, string ExpiresAtUtc, string Notes);
 }
