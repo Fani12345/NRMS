@@ -9,9 +9,16 @@ namespace NRMS.Desktop.Services;
 
 public sealed class AppServices
 {
+    // Slice 1–4: Case workflows
     public NrmsCaseService CaseService { get; }
     public ICaseRepository CaseRepository { get; }
     public IAuditEventRepository AuditRepository { get; }
+
+    // Slice 5: Numbering Resource Model (in-memory for now)
+    public NrmsNumberingService NumberingService { get; }
+    public IOperatorRepository OperatorRepository { get; }
+    public INumberingBlockRepository NumberingBlockRepository { get; }
+    public IAllocationRepository AllocationRepository { get; }
 
     public AppServices()
     {
@@ -42,6 +49,16 @@ public sealed class AppServices
         CaseRepository = caseRepo;
         AuditRepository = auditRepo;
         CaseService = new NrmsCaseService(caseRepo, auditRepo, clock, refGen, hash, storage);
+
+        // Slice 5 wiring (in-memory repositories)
+        OperatorRepository = new InMemoryOperatorRepository();
+        NumberingBlockRepository = new InMemoryNumberingBlockRepository();
+        AllocationRepository = new InMemoryAllocationRepository();
+
+        NumberingService = new NrmsNumberingService(
+            OperatorRepository,
+            NumberingBlockRepository,
+            AllocationRepository);
     }
 
     private static int GetLastUsedCaseSequenceForYear(SqliteDb db, int year)
